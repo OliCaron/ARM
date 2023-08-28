@@ -1,0 +1,802 @@
+SECTION INTVEC
+
+B       main
+
+; Table de pages (correspondance page / trame)
+tableDePages            ASSIGN32 -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+
+; Table de pages inverse (correspondance trame / page)
+tableDePagesInverse     ASSIGN32 -1, -1, -1
+
+; Compteurs d'accès à chaque trame
+tableAcces              ASSIGN32 0, 0, 0
+
+SECTION CODE
+
+;############################################################################
+DecomposeAdresse
+; Paramètres d'entrée :
+; - R8 : Adresse virtuelle à décomposer
+;
+; Valeurs de sortie :
+; - R0 : Index de la page correspondant à cette adresse, numéroté à partir de 0
+; - R1 : Décalage (offset) à l'intérieur de cette page
+;
+; Description :
+; Cette fonction doit, à partir d'une adresse virtuelle, déterminer à quelle
+; page cette adresse appartient. Elle doit également calculer le décalage
+; requis à partir du début de la page pour atteindre l'adresse demandée.
+; La fonction doit retourner dans R0 l'index de la page en question et dans
+; R1 le décalage calculé.
+; 
+; Notes: 
+; Dans l'énoncé de ce TP, on emploie les termes: 
+; - « index » pour dénoter le numéro de page
+; - « décalage » pour dénoter la position dans la page. 
+; Cette spécification vous est donnée pour faire le parallèle avec ce qui est
+; indiqué dans les notes de cours. 
+;
+; Suppositions nécessaires :
+; - Ce système utilise des pages de 32 octets.
+;
+
+; ÉCRIVEZ VOTRE CODE ICI
+
+PUSH {R8}
+
+MOV R0, #0x0
+
+boucleDecomposerAdresse
+CMP R8, #32
+BCC finBoucleDecomposerAdresse
+SUB R8, R8, #32
+ADD R0, R0, #1
+B boucleDecomposerAdresse
+finBoucleDecomposerAdresse
+
+MOV R1, R8
+
+POP {R8}
+BX LR
+
+;############################################################################
+TrouverPage
+; Paramètres d'entrée :
+; - R0 : Numéro de la page demandée
+;
+; Valeurs de sortie :
+; - R2 : -1 si cette page n'est pas présente en RAM (défaut de page), sinon
+;        le numéro de la trame en RAM contenant cette page
+;
+;
+; Description :
+;
+; Cette fonction doit déterminer la trame contenant une page en RAM.
+; Pour ce faire, elle utilise le numéro de page i reçu en argument dans R0, et
+; retourne la valeur contenu à la position i de la table de pages. Par exemple,
+; si la table de pages contient les valeurs 1, -1, -1, 2, -1, 0, -1, ... et que
+; l'on demande la page numéro 3, alors cette fonction doit retourner 2
+; (puisque la valeur du 4e élément de la table de page est 2, et qu'on commence
+; à compter à partir de zéro). Si on avait plutôt demandé la page numéro 0,
+; alors la fonction aurait dû retourner 1. Si on avait demandé la page numéro 5,
+; alors le retour devrait être 0. Finalement, si on demande une page inexistante
+; en RAM (qui n'est contenue dans aucune trame), alors il faut retourner -1.
+; Par exemple, si on avait demandé la page numéro 2, ou la page numéro 4,
+; il aurait fallu retourner -1, puisque c'est la valeur de la table de pages
+; à ces positions.
+;
+; Suppositions nécessaires :
+; - Chaque entrée de la table de pages fait 4 octets.
+;
+
+; ÉCRIVEZ VOTRE CODE ICI
+
+PUSH {R0, R3}
+
+LDR R3, =tableDePages
+
+boucleTrouverPage
+CMP R0, #0
+BEQ finBoucleTrouverPage
+ADD R3, R3, #0x4
+SUB R0, R0, #1
+B boucleTrouverPage
+finBoucleTrouverPage
+
+LDR R2, [R3]
+
+POP {R3, R0}
+BX LR
+
+;############################################################################
+CopieMemoire
+; Paramètre d'entrée :
+; - R10 : Adresse source
+; - R11 : Adresse destination
+; - R12 : Nombre d'octets à copier
+;
+; Valeurs de sortie :
+; - Aucune valeur de sortie requise
+; - La copie doit cependant bien avoir été effectuée
+;
+; Description :
+; Cette fonction doit copier les données d'un endroit à l'autre de la mémoire.
+; Elle est analogue à celle du TP3, mais la formulation de ses arguments
+; diffère légèrement, faites donc attention!
+;
+; Suppositions nécessaires :
+; - Le nombre d'octets à copier sera toujours un multiple de 4.
+;
+
+; ÉCRIVEZ VOTRE CODE ICI
+PUSH {R9, R10, R11, R12}
+
+boucleCopieMemoire
+CMP R12, #0
+BEQ finBoucleCopieMemoire
+LDR R9, [R10]
+STR R9, [R11]
+ADD R10, R10, #4
+ADD R11, R11, #4
+SUB R12, R12, #4
+B boucleCopieMemoire
+finBoucleCopieMemoire
+
+POP {R12, R11, R10, R9}
+BX LR
+
+;############################################################################
+TrouverValeurMaximum
+; Paramètres d'entrée :
+; - Aucun paramètre d'entrée
+;
+; Valeurs de sortie :
+; - R2 : index de la trame possédant le compteur le plus élevé
+;
+; Description :
+; Cette fonction doit retourner l'index de la trame qui a été le moins
+; récemment utilisée. Pour ce faire, elle doit lire le contenu de tableAcces
+; et déterminer l'index de la plus GRANDE valeur. Par exemple, si tableAcces
+; contient 8, 3, 5, alors cette fonction doit retourner 0x00 dans R2. Si elle
+; contient plutôt 2, 7, 1, alors c'est 0x01 qui doit être retourné (la position
+; du 7 dans le tableau).
+;
+; Suppositions nécessaires :
+; - La RAM contient 3 trames (donc il y a 3 compteurs).
+;
+
+; ÉCRIVEZ VOTRE CODE ICI
+
+PUSH {R8, R9, R10, R11}
+
+MOV R2, #0
+LDR R8, =tableAcces
+LDR R9, [R8]
+ADD R8, R8, #4
+LDR R10, [R8]
+ADD R8, R8, #4
+LDR R11, [R8]
+
+CMP R9, R10
+MOVCC R9, R10
+MOVHI R2, #0
+MOVCC R2, #1
+
+CMP R9, R11
+MOVCC R2, #2
+
+POP {R11, R10, R9, R8}
+BX LR
+
+;############################################################################
+ChargerPage
+; Paramètres d'entrée :
+; - R0 : index de la page à charger
+; - R2 : index de la trame où la charger
+;
+; Valeurs de sortie :
+; - Aucun registre modifié
+; - Une copie doit être faite entre la page à charger sur le disque et la
+;   trame où la charger en RAM.
+; - La table des pages et la table des pages inverse doivent être mises à
+;   jour pour refléter ce changement
+;
+; Description :
+; Cette fonction doit copier une page à partir du disque dur dans une trame
+; en mémoire vive. Elle doit également mettre à jour la table des pages et la
+; table des pages inverse.
+; Chaque page est stockée à l'endroit sur le disque dur correspondant à son 
+; numéro (index). Par exemple, la page 0 est stocké dans les premiers
+; 32 octets du disque dur, la page 1 dans les 32 octets suivants, etc. 
+; CopieMemoire vous sera certainement utile dans cette fonction.
+;
+; Suppositions nécessaires :
+; - Ce système utilise des pages de 32 octets.
+;
+
+; ÉCRIVEZ VOTRE CODE ICI
+PUSH {R8, R9, R10, R11, R12, R14}
+
+LDR R11, =MaRAM
+LDR R10, =MonDisqueDur
+LDR R8, =tableDePages
+LDR R9, =tableDePagesInverse
+
+PUSH {R0}
+boucle1ChargerPage
+CMP R0, #0
+BEQ finBoucle1ChargerPage
+ADD R10, R10, #32
+ADD R8, R8, #4
+SUB R0, R0, #1
+B boucle1ChargerPage
+finBoucle1ChargerPage
+POP {R0}
+
+PUSH {R2}
+boucle2ChargerPage
+CMP R2, #0
+BEQ finBoucle2ChargerPage
+ADD R11, R11, #32
+ADD R9, R9, #4
+SUB R2, R2, #1
+B boucle2ChargerPage
+finBoucle2ChargerPage
+POP {R2}
+
+STR R2, [R8]
+STR R0, [R9]
+MOV R12, #32
+BL CopieMemoire
+
+POP {R14, R12, R11, R10, R9, R8}
+BX LR
+
+;############################################################################
+EvincerPage
+; Paramètres d'entrée :
+; - Aucun paramètre d'entrée
+;
+; Valeurs de sortie :
+; - R2 : index de la trame à utiliser, trame qui doit préalablement avoir été
+;   sauvegardée sur le disque dur
+; - La table des pages doit être mise à jour pour indiquer que la page qui
+;   occupait précédemment cette trame n'est plus en mémoire
+;
+; Description :
+; Cette fonction doit d'abord utiliser la fonction TrouverValeurMaximum pour
+; déterminer la trame ayant été accédée le moins récemment. Par la suite, elle
+; doit copier cette page de la RAM vers le disque, afin de permettre son
+; remplacement. Chaque page doit être stockée à l'endroit sur le disque dur
+; correspondant à son numéro. Par exemple, la page 0 est stocké dans les premiers
+; 32 octets du disque dur, la page 1 dans les 32 octets suivants, etc. 
+; Finalement, la table des pages doit être mise à jour.
+; Il existe une EXCEPTION à ce comportement : si la table de pages inverse
+; indique que la trame mémoire visée n'a jamais contenu une page valide jusqu'à
+; maintenant (la valeur de la table de pages inverse à cet endroit est -1),
+; alors il ne faut PAS essayer de copier la trame, puisque copier une zone
+; mémoire non initialisée générera une erreur.
+; En résumé, la copie doit être effectuée SAUF SI la table de pages inverse
+; contient -1 à l'index correspondant à la trame.
+; CopieMemoire vous sera certainement utile dans cette fonction.
+;
+; Suppositions nécessaires :
+; - Ce système utilise des pages de 32 octets.
+;
+
+; ÉCRIVEZ VOTRE CODE ICI
+
+PUSH {R6, R7, R8, R9, R10, R11, R12, R14}
+
+BL TrouverValeurMaximum
+
+LDR R10, =MaRAM
+LDR R11, =MonDisqueDur
+LDR R8, =tableDePagesInverse
+LDR R6, =tableDePages
+
+PUSH {R2}
+boucle1EvincerPage
+CMP R2, #0
+BEQ finboucle1EvincerPage
+ADD R8, R8, #4
+ADD R10, R10, #32
+SUB R2, R2, #1
+B boucle1EvincerPage
+finboucle1EvincerPage
+POP {R2}
+
+LDR R9, [R8]
+CMP R9, #-1
+BEQ finFonctionEvincerPage
+
+PUSH {R9}
+boucle2EvincerPage
+CMP R9, #0
+BEQ finboucle2EvincerPage
+ADD R11, R11, #32
+ADD R6, R6, #4
+SUB R9, R9, #1
+B boucle2EvincerPage
+finboucle2EvincerPage
+POP {R9}
+
+MOV R12, #32
+BL CopieMemoire
+
+MOV R7, #-1
+STR R7, [R6]
+
+finFonctionEvincerPage
+
+POP {R14, R12, R11, R10, R9, R8, R7, R6}
+BX LR
+
+
+
+
+;############################################################################
+
+; NE RIEN MODIFIER À PARTIR D'ICI
+; TOUTES LES FONCTIONS SUBSÉQUENTES SONT DÉJÀ CODÉES POUR VOUS
+
+AjusteCompteursAcces
+; Paramètres d'entrée :
+; - R2 : Numéro de la trame (frame) à laquelle on accède
+;
+; Valeurs de sortie :
+; - Aucune valeur de sortie
+;
+; Description :
+; Cette fonction met à jour les compteurs d'accès de chaque trame en mémoire.
+; Une trame qui est accédée voit son compteur remis à 0, alors que toutes
+; les autres ont leur compteur incrémenté.
+;
+; Suppositions nécessaires :
+; Vous pouvez supposer que nous utilisons un système ne pouvant stocker que
+; trois (3) pages dans sa RAM.
+;
+; CETTE FONCTION EST DÉJÀ CODÉE POUR VOUS!
+; VOUS N'AVEZ PAS À LA MODIFIER!
+;
+PUSH {R3, R4, R5}
+LDR R3, =tableAcces
+MOV R4, #2                      ; Index de la page dont on ajuste le compteur.
+                  ; On commence à la fin pour simplifer la condition de sortie de la boucle
+boucleAjusteCompteursAcces
+CMP R4, R2
+MOVEQ R5, #0                    ; Trame à laquelle on accède : on remet son compteur à 0
+LDRNE R5, [R3, R4, LSL #2]      ; Page non-accédée, on ajoute 1 à son compteur
+ADDNE R5, R5, #1
+STR R5, [R3, R4, LSL #2]        ; On inscrit la nouvelle valeur en mémoire
+SUBS R4, R4, #1                 ; On passe à la page précédente
+BPL boucleAjusteCompteursAcces  ; Si on n'a pas traité toutes les pages, on continue!
+
+POP {R3, R4, R5}
+BX LR
+
+;############################################################################
+
+PrepareAccesMemoire
+; Paramètres d'entrée :
+; - R8 : Adresse VIRTUELLE à convertir vers une adresse PHYSIQUE
+;
+; Valeurs de sortie :
+; - R3 : Adresse PHYSIQUE demandée. Cette adresse doit OBLIGATOIREMENT se situer
+;        à l'intérieur des limites de la variable MaRAM, soit entre
+;        0x100000 et 0x10005F
+;
+; Description :
+; Cette fonction doit retrouver l'adresse physique correspondant à une adresse
+; virtuelle passée en paramètre. Cette adresse virtuelle peut correspondre à
+; une page qui n'est PAS chargée en RAM, auquel cas il faut la charger!
+;
+; CETTE FONCTION EST DÉJÀ CODÉE POUR VOUS!
+; VOUS N'AVEZ PAS À LA MODIFIER!
+;
+PUSH {R0-R2,LR}
+
+; Décomposition de l'adresse en # de page (dans R0) et offset en octets
+; par rapport au début de cette page (dans R1)
+BL DecomposeAdresse
+
+; Cette page est-elle présente en mémoire?
+; Si oui R2 contiendra l'index en RAM de la page.
+; Sinon, il contiendra -1, valeur spéciale indiquant un défaut de page
+BL TrouverPage
+
+CMP R2, #-1
+BNE finPrepareAccesMemoire      ; Pas de faute de page, donc on peut
+                                ; sauter directement à l'accès en RAM
+
+BL EvincerPage                  ; Évincer la page utilisée depuis le plus
+                                ; longtemps, et retourner dans R2 la position
+                                ; de cette trame
+
+BL ChargerPage                  ; Charger la page voulue à cet endroit
+
+finPrepareAccesMemoire
+; À cet endroit on sait que la page est présente en RAM, dans la trame R2
+; et que l'offset par rapport au début de le page est R1
+LDR R3, =MaRAM                  ; Debut de la RAM
+ADD R3, R3, R2, LSL #5          ; On additionne 32 * l'index de page
+ADD R3, R3, R1
+
+BL AjusteCompteursAcces         ; On met à jour les compteurs nous permettant
+                                ; de déterminer quelle page évincer
+POP {R0-R2,LR}
+BX LR
+
+;############################################################################
+
+LoadVirtuel
+; Paramètres d'entrée :
+; - R8 : Adresse VIRTUELLE à charger
+;
+; Valeurs de sortie :
+; - R9 : Valeur (sur 4 octets) de la donnée à cette adresse virtuelle
+;
+; Description :
+; Effectue l'équivalent de LDR R9, [R8], où R8 contient une adresse virtuelle
+;
+; Suppositions nécessaires :
+; On charge toujours 4 octets
+;
+PUSH {LR}
+BL PrepareAccesMemoire
+LDR R9, [R3]                    ; On va chercher la valeur
+POP {LR}
+BX LR
+
+;###############################################################################
+
+StoreVirtuel
+; Paramètres d'entrée :
+; - R8 : Adresse VIRTUELLE à laquelle écrire
+; - R9 : Valeur à y écrire
+;
+; Valeurs de sortie :
+; - Aucune
+;
+; Description :
+; Effectue l'équivalent de STR R9, [R8], où R8 est une adresse virtuelle
+;
+; Suppositions nécessaires :
+; On écrit toujours sur 4 octets
+;
+PUSH {LR}
+BL PrepareAccesMemoire
+STR R9, [R3]                    ; On stocke la valeur
+POP {LR}
+BX LR
+
+;###############################################################################
+
+main
+
+; Initialisation de la pile
+LDR SP, =MaPile
+ADD SP, SP, #200
+
+; Ne pas effacer cette ligne: ${TEST_CORRECTION}
+
+; DÉBUT DES TESTS
+; LES LIGNES SUIVANTES SONT DES PETITS PROGRAMMES QUI TESTENT CHAQUE FONCTION
+; VOUS DEVEZ VOUS ASSURER VOUS-MÊMES DE LA RÉUSSITE DE CES TESTS
+; CHAQUE TEST NECESSITE QUE LES TESTS PRÉCÉDENTS SOIENT FONCTIONNELS
+
+; Test de DecomposeAdresse
+MOV R8, #196
+BL DecomposeAdresse
+ASSERT R0=6,R1=4
+
+MOV R8, #0
+BL DecomposeAdresse
+ASSERT R0=0,R1=0
+
+MOV R8, #88
+BL DecomposeAdresse
+ASSERT R0=2,R1=24
+
+
+; Test de TrouverPage
+LDR R0, =tableDePages
+MOV R1, #1
+MOV R2, #0
+MOV R3, #-1
+MOV R4, #-1
+MOV R5, #-1
+MOV R6, #2
+STMIA R0, {R1-R6}
+MOV R0, #0
+BL TrouverPage
+ASSERT R2=1
+
+MOV R0, #1
+BL TrouverPage
+ASSERT R2=0
+
+MOV R0, #5
+BL TrouverPage
+ASSERT R2=2
+
+MOV R0, #4
+BL TrouverPage
+ASSERT R2=-1
+
+MOV R2, #5
+MOV R0, #2
+BL TrouverPage
+ASSERT R2=-1
+
+MOV R1, #-1
+MOV R2, #-1
+MOV R3, #-1
+MOV R4, #-1
+MOV R5, #-1
+MOV R6, #-1
+LDR R0, =tableDePages
+STMIA R0, {R1-R6}
+
+; Test de TrouverValeurMaximum
+LDR R0, =tableAcces
+MOV R1, #5
+MOV R2, #0
+MOV R3, #6
+STMIA R0, {R1-R3}
+BL TrouverValeurMaximum
+ASSERT R2=2
+
+MOV R3, #4
+STMIA R0, {R1-R3}
+BL TrouverValeurMaximum
+ASSERT R2=0
+
+
+; Test 1 de CopieMemoire
+LDR R10, =AdresseSource1
+LDR R11, =AdresseDest1
+MOV R12, #12
+BL CopieMemoire
+; >>> Le contenu de AdresseDest1 devrait être égal à celui de AdresseSource1
+ASSERT 0x143C=0x12, 0x143D=0, 0x143E=0, 0x143F=0
+ASSERT 0x1440=0x34, 0x1441=0, 0x1442=0, 0x1443=0
+ASSERT 0x1444=0x45, 0x1445=0, 0x1446=0, 0x1447=0
+ASSERT 0x1448=0xFFFFFFFF
+
+; Test 2 de CopieMemoire
+LDR R10, =AdresseSource2
+LDR R11, =AdresseDest2
+MOV R12, #8
+BL CopieMemoire
+; >>> Le contenu de AdresseDest2 devrait être égal à celui de AdresseSource2
+ASSERT 0x1454=0x67, 0x1455=0, 0x1456=0, 0x1457=0
+ASSERT 0x1458=0x89, 0x1459=0, 0x145A=0, 0x145B=0
+ASSERT 0x145C=0xFFFFFFFF
+
+; Test 3 de CopieMemoire
+LDR R10, =AdresseSource3
+LDR R11, =AdresseDest3
+MOV R12, #32
+BL CopieMemoire
+; >>> Le contenu de AdresseDest3 devrait être égal à celui de AdresseSource3
+ASSERT 0x1480=0, 0x1481=0, 0x1482=0, 0x1483=0
+ASSERT 0x1484=1, 0x1485=0, 0x1486=0, 0x1487=0
+ASSERT 0x1488=2, 0x1489=0, 0x148A=0, 0x148B=0
+ASSERT 0x148C=3, 0x148D=0, 0x148E=0, 0x148F=0
+ASSERT 0x1490=4, 0x1491=0, 0x1492=0, 0x1493=0
+ASSERT 0x1494=5, 0x1495=0, 0x1496=0, 0x1497=0
+ASSERT 0x1498=6, 0x1499=0, 0x149A=0, 0x149B=0
+ASSERT 0x149C=7, 0x149D=0, 0x149E=0, 0x149F=0
+ASSERT 0x14A0=0xFFFFFFFF
+
+; Test 4 de CopieMemoire
+LDR R10, =MonDisqueDur
+MOV R1, #0
+MOV R2, #0
+boucleTestCopieMemoire
+STR R1, [R10, R2]
+ADD R2, R2, #4
+CMP R2, #32
+BNE boucleTestCopieMemoire
+ADD R11, R10, #128
+MOV R12, #32
+BL CopieMemoire
+; >>> Les adresses allant de 0x1160 à 0x117F devraient toutes valoir 0x00
+ASSERT 0x1160=0,0x1161=0,0x1162=0,0x1163=0,0x1164=0,0x1165=0,0x1166=0,0x1167=0
+ASSERT 0x1168=0,0x1169=0,0x116A=0,0x116B=0,0x116C=0,0x116D=0,0x116E=0,0x116F=0
+ASSERT 0x1170=0,0x1171=0,0x1172=0,0x1173=0,0x1174=0,0x1175=0,0x1176=0,0x1177=0
+ASSERT 0x1178=0,0x1179=0,0x117A=0,0x117B=0,0x117C=0,0x117D=0,0x117E=0,0x117F=0
+
+; Test de ChargerPage
+; (CopieMemoire DOIT fonctionner correctement avant de faire ce test)
+MOV R0, #4
+MOV R2, #2
+BL ChargerPage
+ASSERT 0x14=2,0x5C=4
+; >>> Les adresses allant de 0x1040 à 0x105F devraient toutes valoir 0x00
+ASSERT 0x1040=0,0x1041=0,0x1042=0,0x1043=0,0x1044=0,0x1045=0,0x1046=0,0x1047=0
+ASSERT 0x1048=0,0x1049=0,0x104A=0,0x104B=0,0x104C=0,0x104D=0,0x104E=0,0x104F=0
+ASSERT 0x1050=0,0x1051=0,0x1052=0,0x1053=0,0x1054=0,0x1055=0,0x1056=0,0x1057=0
+ASSERT 0x1058=0,0x1059=0,0x105A=0,0x105B=0,0x105C=0,0x105D=0,0x105E=0,0x105F=0
+
+MOV R0, #0
+MOV R2, #0
+BL ChargerPage
+ASSERT 0x04=0,0x54=0
+; >>> Les adresses allant de 0x1000 à 0x101F devraient toutes valoir 0x00
+ASSERT 0x1000=0,0x1001=0,0x1002=0,0x1003=0,0x1004=0,0x1005=0,0x1006=0,0x1007=0
+ASSERT 0x1008=0,0x1009=0,0x100A=0,0x100B=0,0x100C=0,0x100D=0,0x100E=0,0x100F=0
+ASSERT 0x1010=0,0x1011=0,0x1012=0,0x1013=0,0x1014=0,0x1015=0,0x1016=0,0x1017=0
+ASSERT 0x1018=0,0x1019=0,0x101A=0,0x101B=0,0x101C=0,0x101D=0,0x101E=0,0x101F=0
+
+
+; Test de EvincerPage
+; (TrouverValeurMaximum, CopieMemoire et ChargerPage DOIVENT fonctionner
+; correctement avant de faire ce test)
+; Les deux appels précédents à ChargerPage doivent avoir été exécutés
+; sans erreur!
+LDR R0, =MaRAM
+MOV R1, #0xAA
+STR R1, [R0]
+STR R1, [R0, #8]
+STR R1, [R0, #12]
+LDR R0, =tableAcces
+MOV R1, #5
+MOV R2, #3
+MOV R3, #4
+STMIA R0, {R1-R3}
+BL EvincerPage
+ASSERT R2=0
+ASSERT 0x10E0=0xAA,0x10E1=0x00,0x10E2=0x00,0x10E3=0x00
+ASSERT 0x10E8=0xAA,0x10E9=0x00,0x10EA=0x00,0x10EB=0x00
+ASSERT 0x10EC=0xAA,0x10ED=0x00,0x10EE=0x00,0x10EF=0x00
+ASSERT 0x04=0xFFFFFFFF
+
+LDR R0, =MaRAM
+ADD R0, R0, #64
+MOV R1, #0xBB
+STR R1, [R0]
+STR R1, [R0, #20]
+STR R1, [R0, #28]
+LDR R0, =tableAcces
+MOV R1, #0
+MOV R2, #7
+MOV R3, #9
+STMIA R0, {R1-R3}
+BL EvincerPage
+ASSERT R2=2
+ASSERT 0x1160=0xBB,0x1161=0x00,0x1162=0x00,0x1163=0x00
+ASSERT 0x1174=0xBB,0x1175=0x00,0x1176=0x00,0x1177=0x00
+ASSERT 0x117C=0xBB,0x117D=0x00,0x117E=0x00,0x117F=0x00
+ASSERT 0x14=0xFFFFFFFF
+
+; Tests globaux. Ces tests sont plus complets que les précédents, car ils
+; utilisent TOUTES vos fonctions (directement ou indirectement). Il est donc
+; important de vous assurez que vos fonctions soient correctes individuellement
+; avant de procéder aux tests suivants.
+
+; Initialisation de la table de pages
+LDR R0, =tableDePages
+MOV R1, #-1
+MOV R2, #0
+boucleInitTablePages
+STR R1, [R0, R2]
+ADD R2, R2, #4
+CMP R2, #80
+BNE boucleInitTablePages
+
+; Initialisation de la table de pages inversée
+LDR R0, =tableDePagesInverse
+MOV R1, #-1
+MOV R2, #-1
+MOV R3, #-1
+STMIA R0, {R1-R3}
+
+; Initialisation des compteurs
+LDR R0, =tableAcces
+MOV R1, #0
+MOV R2, #0
+MOV R3, #0
+STMIA R0, {R1-R3}
+
+; Initialisation de la mémoire virtuelle
+; Chaque page mémoire se voit assigner la valeur correspondant à son index + 1
+; Par exemple, la page 0 est remplie de 1, la page 1 est remplie de 2, et
+; ainsi de suite
+MOV R0, #1
+LDR R2, =MonDisqueDur
+b1
+MOV R1, #32
+b2
+STR R0, [R2], #4
+SUBS R1, R1, #4
+BNE b2
+ADD R0, R0, #1
+CMP R0, #21
+BNE b1
+
+; Tests
+MOV R8, #0x00
+BL LoadVirtuel
+ASSERT R9=1
+
+MOV R8, #0x20
+BL LoadVirtuel
+ASSERT R9=2
+
+MOV R8, #0x04
+BL LoadVirtuel
+ASSERT R9=1
+
+MOV R8, #0x3C
+BL LoadVirtuel
+ASSERT R9=2
+
+MOV R8, #0x08
+MOV R9, #0xAA
+BL StoreVirtuel
+MOV R9, #0xBB
+BL LoadVirtuel
+ASSERT R9=0xAA
+
+MOV R8, #0x40
+BL LoadVirtuel
+ASSERT R9=0x03
+
+MOV R8, #0x20C
+MOV R9, #0xCC
+BL StoreVirtuel
+MOV R8, #0xA8
+BL LoadVirtuel
+ASSERT R9=0x06
+ASSERT 0x10E8=0xAA
+
+MOV R8, #0x08
+BL LoadVirtuel
+ASSERT R9=0xAA
+
+MOV R8, #0x110
+BL LoadVirtuel
+ASSERT R9=9
+ASSERT 0x12EC=0xCC
+
+MOV R8, #0x20C
+BL LoadVirtuel
+ASSERT R9=0xCC
+
+; FIN DES TESTS
+B main
+
+
+
+SECTION DATA
+
+; Espace simulant la RAM (96 octets)
+MaRAM               ALLOC8    96
+
+; Espace vide (seulement utilisé pour faciliter la séparation visuelle
+; entre la RAM et le disque)
+EspaceVide          ALLOC32   32
+
+; Espace simulant le disque dur (640 octets)
+MonDisqueDur        ALLOC8    640
+
+; Espace non initialisé (laissé volontairement vide)
+Canari              ALLOC32   1
+
+; Utilisé pour sauvegarder les registres, à la discrétion du programmeur
+MaPile              ALLOC32   51
+
+; Utilisé pour tester votre fonction CopieMemoire
+AdresseSource1      ASSIGN32  0x12, 0x34, 0x45
+AdresseDest1        ALLOC32   4
+
+AdresseSource2      ASSIGN32  0x67, 0x89
+AdresseDest2        ALLOC32   3
+
+AdresseSource3      ASSIGN32  0, 1, 2, 3, 4, 5, 6, 7
+AdresseDest3        ALLOC32   9
+
+; Ne pas enlever cette ligne: ${TEST_DATA}
+
